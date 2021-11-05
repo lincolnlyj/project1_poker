@@ -54,7 +54,7 @@ class PriorityQueue(object):
 class Poker:
     """
     扑克牌类，用于存储比较扑克牌
-    大小王均为JOKER
+    大小王均为JOKER，利用花色进行区分，小王为红桃，大王为黑桃
     比较大小和相等关系时不考虑牌的类型
     """
     __pokerMap = {'3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9,
@@ -93,6 +93,11 @@ class Poker:
 
     @staticmethod
     def get_num_value(num):
+        """
+        获得牌的点数对应的数值
+        :param num:
+        :return:
+        """
         return Poker.__pokerMap[num]
 
     @staticmethod
@@ -104,6 +109,23 @@ class Poker:
         :return: 间隔后扑克的点数
         """
         return Poker.__rePokerMap[Poker.__pokerMap[num] + gap]
+
+    @staticmethod
+    def get_order(poker):
+        """
+        :param poker: 扑克牌
+        :return:      扑克牌对应的顺序
+        """
+        order = Poker.__pokerMap[poker.num] - 3
+        if poker.suit == 'heart':
+            order = order * 4 + 1
+        elif poker.suit == 'spade':
+            order = order * 4 + 2
+        elif poker.suit == 'club':
+            order = order * 4 + 3
+        elif poker.suit == 'diamond':
+            order = order * 4 + 4
+        return order
 
     def __repr__(self):
         return str((self.num, self.suit))
@@ -137,7 +159,7 @@ class PokerNode:
     """
     用于存储当前牌状态的节点
     """
-    def __init__(self, pokerState, parent = None, action = None, searchType = "all"):
+    def __init__(self, pokerState, parent = None, action = None):
         """
         :param pokerState:  当前手牌
         :param parent:      上一个阶段的手牌
@@ -153,7 +175,7 @@ class PokerNode:
             self.step = parent.step + 1
         if len(pokerState) > 0:
             self.possibleStep = OrderedDict()
-            self.search_step(searchType)
+            self.search_step()
         else:
             self.pathCost = self.step
 
@@ -168,14 +190,19 @@ class PokerNode:
             except KeyError:
                 self.pokerCnt[poker.num] = [poker]
 
-    def get_child(self, action, searchType):
+    def get_child(self, action):
+        """
+        得到新的节点
+        :param action:  当前节点到新的节点
+        :return:        新的节点
+        """
         newState = list(self.state)
         try:
             for item in action:# 得到新的状态
                 newState.remove(item)
         except TypeError:
             newState.remove(action)
-        return PokerNode(newState, self, action, searchType)
+        return PokerNode(newState, self, action)
 
     def path(self):
         """
@@ -190,13 +217,12 @@ class PokerNode:
             node = node.parent
         return list(reversed(path_back))
 
-    def search_step(self, searchType):
+    def search_step(self):
         """
-        :param searchType: 搜索类型，包括每种牌型只找最长的情况"longest"，和所有可能出牌情况"all"
-        :return:
+        搜索所有可能的出牌步骤，将结果存在self.possibleStep中
+        self.possibleStep为有序字典，以便于后续出牌
+        将启发函数值存入self.pathCost中
         """
-        if searchType != 'longest' and searchType != 'all':
-            raise ValueError('Parameter searchType is wrong')
         largestCnt = 0
         self.possibleStep['three straight'] = []
         self.possibleStep['three straight with gap'] = []
@@ -204,43 +230,43 @@ class PokerNode:
         self.possibleStep['pair straight with gap'] = []
         self.possibleStep['single straight'] = []
         self.possibleStep['single straight with gap'] = []
-        self.possibleStep['four with two pair'] = []
         self.possibleStep['four with two single'] = []
+        self.possibleStep['four with two pair'] = []
         self.possibleStep['three with pair'] = []
         self.possibleStep['three with single'] = []
         self.possibleStep['four'] = []
         self.possibleStep['three'] = []
         self.possibleStep['pair'] = []
         self.possibleStep['single'] = [] # 一张一张出
-        for num in self.pokerCnt:
-            self.possibleStep['single'].append(self.pokerCnt[num][0])
+        for length in range(1, 5):
+            for num in self.pokerCnt:
+                if len(self.pokerCnt[num]) == length:
+                    self.possibleStep['single'].append(self.pokerCnt[num][0])
         if len(self.possibleStep['single']):
             largestCnt = 1
 
         for num in self.pokerCnt: # 寻找可以两张一起出的组合
+            lst = self.pokerCnt[num]
+            if len(lst) == 2:
+                if largestCnt < 2:
+                    largestCnt = 2
+                self.possibleStep['pair'].append(lst)
+
+        for num in self.pokerCnt:  # 寻找可以两张一起出的组合
+            lst = self.pokerCnt[num]
+            if len(lst) == 3:
+                if largestCnt < 3:
+                    largestCnt = 3
+                self.possibleStep['three'].append(lst)
+                self.possibleStep['pair'].append(lst[0: 2])
+
+        for num in self.pokerCnt:  # 寻找可以两张一起出的组合
             lst = self.pokerCnt[num]
             if len(lst) == 4:
                 if largestCnt < 4:
                     largestCnt = 4
                 self.possibleStep['four'].append(lst)
                 self.possibleStep['three'].append(lst[0: 3])
-                # if searchType == 'longest': # 如果按照每种拍最长的可能性进行搜索，就去掉单牌
-                #     for item in lst:
-                #         self.possibleStep['single'].remove(item) # 去掉可以四张一起出的单张牌
-                # else:
-                #     self.possibleStep['pair'].append(lst[0: 2])
-            elif len(lst) == 3:
-                if largestCnt < 3:
-                    largestCnt = 3
-                self.possibleStep['three'].append(lst)
-                self.possibleStep['pair'].append(lst[0: 2])
-                # if searchType == 'longest':  # 如果按照每种拍最长的可能性进行搜索，就去掉单牌
-                #     for item in lst:
-                #         self.possibleStep['single'].remove(item)  # 去掉可以三张一起出的单张牌
-            elif len(lst) == 2:
-                if largestCnt < 2:
-                    largestCnt = 2
-                self.possibleStep['pair'].append(lst)
 
         for item in self.possibleStep['three']:
             for single in self.possibleStep['single']:# 寻找三带一的组合
@@ -272,14 +298,14 @@ class PokerNode:
                             if largestCnt < 8:
                                 largestCnt = 8
                             self.possibleStep['four with two pair'].append(item + pair + pair2)
+                elif pair[0] != item[0] and pair[0].num == 'JOKER':
+                    if largestCnt < 6:
+                        largestCnt = 6
+                    self.possibleStep['four with two single'].append(item + pair)
 
-        lastLst = None# 上一个顺子
         for num in self.pokerCnt:
             if Poker.get_num_value(num) >= 11:# 对于大于以J的扑克牌作为开始的顺子不可能存在
                 break
-            if lastLst and searchType == 'longest':# 当searchType为"longest"时，不保存有重叠的顺子
-                if Poker(num, 'heart') in lastLst:
-                    continue
             straightLst = [self.pokerCnt[num][0]]# 存储顺子的list
             while True:
                 nextNum = Poker.get_next_poker_num(num, 1)
@@ -290,20 +316,9 @@ class PokerNode:
                     straightLst.append(self.pokerCnt[num][0])
                 else:# 如果不在，就跳出循环
                     break
-            if searchType == 'all': # 如果搜索所有出牌可能
-                while len(straightLst) >= 5:# 如果一个顺子中的牌数大于等于5，就存入可能步骤中
-                    self.possibleStep['single straight'].append(list(straightLst))
-                    straightLst.pop(len(straightLst) - 1)
-            else: # 如果搜索最长出牌可能
-                if len(straightLst) >= 5:
-                    if largestCnt < len(straightLst):
-                        largestCnt = len(straightLst)
-                    self.possibleStep['single straight'].append(list(straightLst))
-                    lastLst = straightLst
-                    straightLst.pop(0)
-                    while len(straightLst) >= 5:# 如果一个顺子中的牌数大于等于5，就存入可能步骤中
-                        self.possibleStep['single straight'].append(list(straightLst))
-                        straightLst.pop(0)
+            while len(straightLst) >= 5:# 如果一个顺子中的牌数大于等于5，就存入可能步骤中
+                self.possibleStep['single straight'].append(list(straightLst))
+                straightLst.pop(len(straightLst) - 1)
         if not self.possibleStep['single straight']:
             self.possibleStep.pop('single straight')
 
@@ -322,32 +337,18 @@ class PokerNode:
                     gapStraightLst.append(self.pokerCnt[num][0])
                 else:  # 如果不在，就跳出循环
                     break
-            if searchType == 'all':  # 如果搜索所有出牌可能
-                while len(gapStraightLst) >= 5:  # 如果一个顺子中的牌数大于等于5，就存入可能步骤中
-                    self.possibleStep['single straight with gap'].append(list(gapStraightLst))
-                    gapStraightLst.pop(len(gapStraightLst) - 1)
-            else:
-                if len(gapStraightLst) >= 5:  # 如果一个顺子中的牌数大于等于5，就存入可能步骤中
-                    if largestCnt < len(gapStraightLst):
-                        largestCnt = len(gapStraightLst)
-                    self.possibleStep['single straight with gap'].append(list(gapStraightLst))
-                    gapStraightLst.pop(0)
-                    while len(gapStraightLst) >= 5:  # 如果一个顺子中的牌数大于等于5，就存入可能步骤中
-                        self.possibleStep['single straight with gap'].append(list(gapStraightLst))
-                        gapStraightLst.pop(0)
+            while len(gapStraightLst) >= 5:  # 如果一个顺子中的牌数大于等于5，就存入可能步骤中
+                self.possibleStep['single straight with gap'].append(list(gapStraightLst))
+                gapStraightLst.pop(len(gapStraightLst) - 1)
         if not self.possibleStep['single straight with gap']:
             self.possibleStep.pop('single straight with gap')
 
         # 双顺子
-        lastLst = None
         for num in self.pokerCnt:
             if Poker.get_num_value(num) >= 13:# 对于大于以K的扑克牌作为开始的顺子不可能存在
                 break
             if len(self.pokerCnt[num]) < 2:# 如果当前对子不存在
                 continue
-            if lastLst and searchType == 'longest':# 当searchType为"longest"时，不保存有重叠的顺子
-                if Poker(num, 'heart') in lastLst:
-                    continue
             pairStraightLst = [self.pokerCnt[num][0], self.pokerCnt[num][1]]
             while True:
                 nextNum = Poker.get_next_poker_num(num, 1)
@@ -361,23 +362,10 @@ class PokerNode:
                     pairStraightLst.append(self.pokerCnt[num][1])
                 else:  # 如果不在，就跳出循环
                     break
-            if searchType == 'all':
-                while len(pairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于3，就存入可能步骤中
-                    self.possibleStep['pair straight'].append(list(pairStraightLst))
-                    pairStraightLst.pop(len(pairStraightLst) - 1)
-                    pairStraightLst.pop(len(pairStraightLst) - 1)
-            else:
-                if len(pairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于3，就存入可能步骤中
-                    if largestCnt < len(pairStraightLst):
-                        largestCnt = len(pairStraightLst)
-                    self.possibleStep['pair straight'].append(list(pairStraightLst))
-                    lastLst = pairStraightLst
-                    pairStraightLst.pop(0)
-                    pairStraightLst.pop(0)
-                    while len(pairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于3，就存入可能步骤中
-                        self.possibleStep['pair straight'].append(list(pairStraightLst))
-                        pairStraightLst.pop(0)
-                        pairStraightLst.pop(0)
+            while len(pairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于3，就存入可能步骤中
+                self.possibleStep['pair straight'].append(list(pairStraightLst))
+                pairStraightLst.pop(len(pairStraightLst) - 1)
+                pairStraightLst.pop(len(pairStraightLst) - 1)
         if not self.possibleStep['pair straight']:
             self.possibleStep.pop('pair straight')
 
@@ -387,9 +375,6 @@ class PokerNode:
                 break
             if len(self.pokerCnt[num]) < 2:# 如果当前对子不存在
                 continue
-            if lastLst and searchType == 'longest':# 当searchType为"longest"时，不保存有重叠的顺子
-                if Poker(num, 'heart') in lastLst:
-                    continue
             gapPairStraightLst = [self.pokerCnt[num][0], self.pokerCnt[num][1]]
             while True:
                 nextNum = Poker.get_next_poker_num(num, 2)
@@ -403,36 +388,19 @@ class PokerNode:
                     gapPairStraightLst.append(self.pokerCnt[num][1])
                 else:  # 如果不在，就跳出循环
                     break
-            if searchType == 'all':
-                while len(gapPairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
-                    self.possibleStep['pair straight with gap'].append(list(gapPairStraightLst))
-                    gapPairStraightLst.pop(len(gapPairStraightLst) - 1)
-                    gapPairStraightLst.pop(len(gapPairStraightLst) - 1)
-            else:
-                if len(gapPairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
-                    if largestCnt < len(gapPairStraightLst):
-                        largestCnt = len(gapPairStraightLst)
-                    self.possibleStep['pair straight with gap'].append(list(gapPairStraightLst))
-                    lastLst = gapPairStraightLst
-                    gapPairStraightLst.pop(0)
-                    gapPairStraightLst.pop(0)
-                    while len(gapPairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于3，就存入可能步骤中
-                        self.possibleStep['pair straight with gap'].append(list(gapPairStraightLst))
-                        gapPairStraightLst.pop(0)
-                        gapPairStraightLst.pop(0)
+            while len(gapPairStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
+                self.possibleStep['pair straight with gap'].append(list(gapPairStraightLst))
+                gapPairStraightLst.pop(len(gapPairStraightLst) - 1)
+                gapPairStraightLst.pop(len(gapPairStraightLst) - 1)
         if not self.possibleStep['pair straight with gap']:
             self.possibleStep.pop('pair straight with gap')
 
         # 三顺子
-        lastLst = None
         for num in self.pokerCnt:
             if Poker.get_num_value(num) >= 14:# 对于大于以A的扑克牌作为开始的顺子不可能存在
                 break
             if len(self.pokerCnt[num]) < 3:  # 如果当前对子不存在
                 continue
-            if lastLst and searchType == 'longest':# 当searchType为"longest"时，不保存有重叠的顺子
-                if Poker(num, 'heart') in lastLst:
-                    continue
             threeStraightLst = [self.pokerCnt[num][0], self.pokerCnt[num][1], self.pokerCnt[num][2]]
             while True:
                 nextNum = Poker.get_next_poker_num(num, 1)
@@ -447,36 +415,18 @@ class PokerNode:
                     threeStraightLst.append(self.pokerCnt[num][2])
                 else:  # 如果不在，就跳出循环
                     break
-            if searchType == 'all':
-                while len(threeStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
-                    self.possibleStep['three straight'].append(list(threeStraightLst))
-                    threeStraightLst.pop(len(threeStraightLst) - 1)
-                    threeStraightLst.pop(len(threeStraightLst) - 1)
-                    threeStraightLst.pop(len(threeStraightLst) - 1)
-            else:
-                if len(threeStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
-                    if largestCnt < len(threeStraightLst):
-                        largestCnt = len(threeStraightLst)
-                    self.possibleStep['three straight'].append(list(threeStraightLst))
-                    lastLst = threeStraightLst
-                    if len(threeStraightLst) == 6: # 如果顺子的牌数等于6，就将三带一和三带二也考虑进来，避免出现非最小状态
-                        for item in self.possibleStep['three with single']:
-                            if item[0] == threeStraightLst[0] or item[0] == threeStraightLst[3]:
-                                self.possibleStep['three straight'].append(item)
-                        for item in self.possibleStep['three with pair']:
-                            if item[0] == threeStraightLst[0] or item[0] == threeStraightLst[3]:
-                                self.possibleStep['three straight'].append(item)
+            while len(threeStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
+                self.possibleStep['three straight'].append(list(threeStraightLst))
+                threeStraightLst.pop(len(threeStraightLst) - 1)
+                threeStraightLst.pop(len(threeStraightLst) - 1)
+                threeStraightLst.pop(len(threeStraightLst) - 1)
 
         # 间隔三顺子
-        lastLst = None
         for num in self.pokerCnt:
             if Poker.get_num_value(num) >= 13:# 对于大于以K的扑克牌作为开始的顺子不可能存在
                 break
             if len(self.pokerCnt[num]) < 3:  # 如果当前对子不存在
                 continue
-            if lastLst and searchType == 'longest':# 当searchType为"longest"时，不保存有重叠的顺子
-                if Poker(num, 'heart') in lastLst:
-                    continue
             gapThreeStraightLst = [self.pokerCnt[num][0], self.pokerCnt[num][1], self.pokerCnt[num][2]]
             while True:
                 nextNum = Poker.get_next_poker_num(num, 2)
@@ -491,39 +441,17 @@ class PokerNode:
                     gapThreeStraightLst.append(self.pokerCnt[num][2])
                 else:  # 如果不在，就跳出循环
                     break
-            if searchType == 'all':
-                while len(gapThreeStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
-                    self.possibleStep['three straight with gap'].append(list(gapThreeStraightLst))
-                    gapThreeStraightLst.pop(len(gapThreeStraightLst) - 1)
-                    gapThreeStraightLst.pop(len(gapThreeStraightLst) - 1)
-                    gapThreeStraightLst.pop(len(gapThreeStraightLst) - 1)
-            else:
-                if len(gapThreeStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
-                    if largestCnt < len(gapThreeStraightLst):
-                        largestCnt = len(gapThreeStraightLst)
-                    self.possibleStep['three straight with gap'].append(list(gapThreeStraightLst))
-                    lastLst = gapThreeStraightLst
-                    if len(gapThreeStraightLst) == 6: # 如果顺子的牌数等于6，就将三带一和三带二也考虑进来，避免出现非最小状态
-                        for item in self.possibleStep['three with single']:
-                            if item[0] == gapThreeStraightLst[0] or item[0] == gapThreeStraightLst[3]:
-                                if item not in self.possibleStep['three straight']:
-                                    self.possibleStep['three straight with gap'].append(item)
-                        for item in self.possibleStep['three with pair']:
-                            if item[0] == gapThreeStraightLst[0] or item[0] == gapThreeStraightLst[3]:
-                                if item not in self.possibleStep['three straight']:
-                                    self.possibleStep['three straight with gap'].append(item)
-        if not self.possibleStep['three straight'] and not self.possibleStep['three straight with gap']:
-            self.possibleStep['three straight'] = self.possibleStep['three with single']\
-                                                  + self.possibleStep['three with pair']
+            while len(gapThreeStraightLst) >= 6:  # 如果一个顺子中的牌数大于等于6，就存入可能步骤中
+                self.possibleStep['three straight with gap'].append(list(gapThreeStraightLst))
+                gapThreeStraightLst.pop(len(gapThreeStraightLst) - 1)
+                gapThreeStraightLst.pop(len(gapThreeStraightLst) - 1)
+                gapThreeStraightLst.pop(len(gapThreeStraightLst) - 1)
         if not self.possibleStep['three straight']:
             self.possibleStep.pop('three straight')
         if not self.possibleStep['three straight with gap']:
             self.possibleStep.pop('three straight with gap')
 
         self.pathCost = self.step + ceil(len(self.state) / largestCnt)
-
-    def update_step(self):
-        pass
 
     def __len__(self):
         return len(self.state)
@@ -540,8 +468,11 @@ class PokerNode:
     def __ne__(self, other):
         return self.state != other.state
 
+    def __repr__(self):
+        return str(self.state)
 
-class PokerProblem:
+
+class PokerPlayer:
     """
     用于处理斗地主的问题
     """
@@ -552,8 +483,10 @@ class PokerProblem:
 
     def deal_random(self, pokerCnt):
         """
+        按照牌的数量随机发牌
         :param pokerCnt: 发牌的数量
-        :return:
+        结果存在self.initNode中
+        self.curNode设置为self.initNode，用于第三问两个玩家对战
         """
         dealOrder = list(range(1, 55))# 得到随机的发牌顺序
         random.shuffle(dealOrder)
@@ -562,17 +495,36 @@ class PokerProblem:
             initPoker.append(Poker(dealOrder[i]))
         initPoker.sort()
         self.initNode = PokerNode(initPoker)
+        self.curNode = self.initNode
 
     def deal_specified(self, pokerLst):
+        """
+        指定牌型的发牌，不用于第三问两个对战
+        :param pokerLst:    指定的扑克牌序列，每个扑克牌用一个点数加花色的元组进行
+        结果存在self.initNode中
+        """
         initPoker = []
         for item in pokerLst:
             initPoker.append(Poker(item[0], item[1]))
         initPoker.sort()
         self.initNode = PokerNode(initPoker)
+        self.curNode = self.initNode
+
+    def get_init_order(self):
+        """
+        得到初始牌的顺序，即将扑克牌的点数和花色转成1~54之间的数字
+        :return: 初始牌的顺序序列
+        """
+        pokerOrderLst = []
+        for item in self.initNode.state:
+            pokerOrderLst.append(Poker.get_order(item))
+        return pokerOrderLst
 
     def solve_without_score(self):
         """
-        用最少的步骤出完牌
+        用最少的步骤出完牌，使用的是A*算法
+        出牌步骤顺序存在self.path中
+        出牌的步数存在self.step中
         """
         nodeQ = PriorityQueue(self.initNode)
         while True:
@@ -582,19 +534,55 @@ class PokerProblem:
                 self.step = len(self.path)
                 break
             for kind in curNode.possibleStep:
-                if kind == 'four with two pair':
+                if kind == 'four with two single':
+                    if len(curNode.possibleStep['four']) > 1:# 考虑四带四
+                        for idx1 in range(0, len(curNode.possibleStep['four'])):
+                            for idx2 in range(idx1 + 1, len(curNode.possibleStep['four'])):
+                                nextNode = curNode.get_child(curNode.possibleStep['four'][idx1]
+                                                             + curNode.possibleStep['four'][idx2])
+                                idx = nodeQ.find(nextNode)
+                                if idx is None:  # 如果不存在于开节点表中，就压入开节点表
+                                    nodeQ.push(nextNode)
+                                else:  # 如果存在，就根据代价的大小判断是否需要替换
+                                    nodeQ.compare_and_replace(idx, nextNode)
                     break
                 for action in curNode.possibleStep[kind]:
-                    nextNode = curNode.get_child(action, "all")
+                    nextNode = curNode.get_child(action)
                     idx = nodeQ.find(nextNode)
                     if idx is None:  # 如果不存在于开节点表中，就压入开节点表
                         nodeQ.push(nextNode)
                     else:  # 如果存在，就根据代价的大小判断是否需要替换
                         nodeQ.compare_and_replace(idx, nextNode)
+
             while len(curNode):
+                kindLst = []# 不出所有顺子
+                for kind in curNode.possibleStep:
+                    if kind == 'four with two single':
+                        break
+                    kindLst.append(kind)
+                for kind in kindLst:
+                    curNode.possibleStep.pop(kind)
+
                 for kind in curNode.possibleStep:
                     if curNode.possibleStep[kind]:  # 出当前可能的牌
-                        nextNode = curNode.get_child(curNode.possibleStep[kind][0], "all")
+                        if kind == 'four with two single':
+                            singleNum2 = curNode.possibleStep[kind][0][5].num
+                            if len(curNode.pokerCnt[singleNum2]) > 1 and curNode.possibleStep['four with two pair']:
+                                pairNum1 = curNode.possibleStep['four with two pair'][0][4].num
+                                if len(curNode.pokerCnt[pairNum1]) == 2:
+                                    nextNode = curNode.get_child(curNode.possibleStep['four with two pair'][0])
+                                    curNode = nextNode
+                                    break
+                        elif kind == 'three with pair':
+                            pairNum = curNode.possibleStep[kind][0][3].num
+                            if len(curNode.pokerCnt[pairNum]) > 2:
+                                if curNode.possibleStep['three with single']:
+                                    singleNum = curNode.possibleStep['three with single'][0][3].num
+                                    if len(curNode.pokerCnt[singleNum]) == 1:
+                                        nextNode = curNode.get_child(curNode.possibleStep['three with single'][0])
+                                        curNode = nextNode
+                                        break
+                        nextNode = curNode.get_child(curNode.possibleStep[kind][0])
                         curNode = nextNode
                         break
             idx = nodeQ.find(curNode)
@@ -602,34 +590,115 @@ class PokerProblem:
                 nodeQ.push(curNode)
             else:  # 如果存在，就根据代价的大小判断是否需要替换
                 nodeQ.compare_and_replace(idx, curNode)
-            # tmpCnt = 0# 如果顺子，四带二这些牌型都没有，再出三带二三带一和其他牌
-            # for kind in curNode.possibleStep:
-            #     if kind == 'three with pair':
-            #         break
-            #     for action in curNode.possibleStep[kind]:
-            #         tmpCnt += 1
-            #         nextNode = curNode.get_child(action)
-            #         idx = nodeQ.find(nextNode)
-            #         if idx is None:  # 如果不存在于开节点表中，就压入开节点表
-            #             nodeQ.push(nextNode)
-            #         else:  # 如果存在，就根据代价的大小判断是否需要替换
-            #             nodeQ.compare_and_replace(idx, nextNode)
-            # if not tmpCnt:# 如果没有顺子，四带二等牌，就出三带一等其他类型的牌
-            #     while len(curNode):
-            #         for kind in curNode.possibleStep:
-            #             if curNode.possibleStep[kind]:# 出当前可能的牌
-            #                 nextNode = curNode.get_child(curNode.possibleStep[kind][0])
-            #                 curNode = nextNode
-            #                 break
-            #     idx = nodeQ.find(curNode)
-            #     if idx is None:  # 如果不存在于开节点表中，就压入开节点表
-            #         nodeQ.push(curNode)
-            #     else:  # 如果存在，就根据代价的大小判断是否需要替换
-            #         nodeQ.compare_and_replace(idx, curNode)
 
     def solve_with_score(self, curNode, stepCnt, value):
         """
-        依据score进行优化
+        依据score进行优化，使用深搜
+        最终score存入self.score中
+        出牌步骤顺序存在self.path中
+        出牌的步数存在self.step中
+        """
+        if len(curNode) == 0:
+            score = -1
+            try:
+                score = log(value, stepCnt)
+            except ValueError: # value为0
+                score = -1
+            except ZeroDivisionError: # stepCnt为1，改为1.01
+                score = log(value, 1.01)
+            finally:
+                if score > self.score: # 如果当前的score更高，就用新的score和path进行更新
+                    self.score = score
+                    self.path = curNode.path()
+                    self.step = len(self.path)
+            return
+        # else:
+        #     score = -1
+        #     try:
+        #         score = log(value, stepCnt)
+        #     except ValueError:  # value为0
+        #         score = -1
+        #     except ZeroDivisionError:  # stepCnt为1，改为1.01
+        #         score = log(value, 1.01)
+        #     finally:
+        #         if score < self.score:
+        #             return
+        for kind in curNode.possibleStep:
+            if kind == 'four with two single':
+                if len(curNode.possibleStep['four']) > 1:  # 考虑四带四
+                    for idx1 in range(0, len(curNode.possibleStep['four'])):
+                        for idx2 in range(idx1 + 1, len(curNode.possibleStep['four'])):
+                            nextNode = curNode.get_child(curNode.possibleStep['four'][idx1]
+                                                         + curNode.possibleStep['four'][idx2])
+                            newValue = value + 4
+                            self.solve_with_score(nextNode, stepCnt + 1, newValue)
+                break
+            for action in curNode.possibleStep[kind]:
+                if kind == 'three straight' or kind == 'three straight with gap': # 如果是三顺子，则value加7
+                    newValue = value + 7
+                elif kind == 'pair straight' or kind == 'pair straight with gap': # 如果是双顺子，则value加6
+                    newValue = value + 6
+                elif kind == 'single straight' or kind == 'single straight with gap': # 如果是单顺子，则value加5
+                    newValue = value + 5
+
+                nextNode = curNode.get_child(action)
+                self.solve_with_score(nextNode, stepCnt + 1, newValue)
+
+        while len(curNode):
+            kindLst = []  # 不出所有顺子
+            for kind in curNode.possibleStep:
+                if kind == 'four with two single':
+                    break
+                kindLst.append(kind)
+            for kind in kindLst:
+                curNode.possibleStep.pop(kind)
+
+            for kind in curNode.possibleStep:
+                if curNode.possibleStep[kind]:  # 出当前可能的牌
+                    if kind == 'four with two single':
+                        singleNum2 = curNode.possibleStep[kind][0][5].num
+                        if len(curNode.pokerCnt[singleNum2]) > 1:
+                            if curNode.possibleStep['four with two pair']:
+                                pairNum2 = curNode.possibleStep['four with two pair'][0][6].num
+                                if len(curNode.pokerCnt[pairNum2]) == 2:
+                                    nextNode = curNode.get_child(curNode.possibleStep['four with two pair'][0])
+                                    curNode = nextNode
+                                    stepCnt += 1
+                                    value += 4
+                                    break
+                                else:
+                                    self._deep_search_with_score(curNode, stepCnt, value)
+                            else:
+                                self._deep_search_with_score(curNode, stepCnt, value)
+                    elif kind == 'three with pair':
+                        pairNum = curNode.possibleStep[kind][0][3].num
+                        if len(curNode.pokerCnt[pairNum]) > 2:
+                            if curNode.possibleStep['three with single']:
+                                singleNum = curNode.possibleStep['three with single'][0][3].num
+                                if len(curNode.pokerCnt[singleNum]) == 1:
+                                    nextNode = curNode.get_child(curNode.possibleStep['three with single'][0])
+                                    curNode = nextNode
+                                    stepCnt += 1
+                                    value += 3
+                                    break
+                                else:
+                                    self._deep_search_with_score(curNode, stepCnt, value)
+                            else:
+                                self._deep_search_with_score(curNode, stepCnt, value)
+                    nextNode = curNode.get_child(curNode.possibleStep[kind][0])
+                    curNode = nextNode
+                    stepCnt += 1
+                    if kind == 'four with two pair' or kind == 'four with two single':  # 如果是四带一对或者四带两对，则value加4
+                        value += 4
+                    elif (kind == 'three' or kind == 'four'
+                            or kind == 'three with pair' or kind == 'three with single'):
+                        value += 3
+                    break
+        self.solve_with_score(curNode, stepCnt, value)
+
+    def _deep_search_with_score(self, curNode, stepCnt, value):
+        """
+        不包含顺子的深搜，辅助实现上一个函数的功能
         """
         if len(curNode) == 0:
             score = -1
@@ -645,74 +714,112 @@ class PokerProblem:
                     self.path = curNode.path()
                     self.step = len(self.path)
             return
+        # else:
+        #     score = -1
+        #     try:
+        #         score = log(value, stepCnt)
+        #     except ValueError:  # value为0
+        #         score = -1
+        #     except ZeroDivisionError:  # stepCnt为1，改为1.01
+        #         score = log(value, 1.01)
+        #     finally:
+        #         if score < self.score:
+        #             return
+        kindLst = []  # 不出所有顺子
         for kind in curNode.possibleStep:
-            if kind == 'four with two pair':
+            if kind == 'four with two single':
+                break
+            kindLst.append(kind)
+        for kind in kindLst:
+            curNode.possibleStep.pop(kind)
+
+        tmpCnt = 0
+        for kind in curNode.possibleStep:
+            if kind == 'pair':
                 break
             for action in curNode.possibleStep[kind]:
-                if kind == 'three straight' or kind == 'three straight with gap': # 如果是三顺子，则value加7
-                    value += 7
-                elif kind == 'pair straight' or kind == 'pair straight with gap': # 如果是双顺子，则value加6
-                    value += 6
-                elif kind == 'single straight' or kind == 'single straight with gap': # 如果是单顺子，则value加5
-                    value += 5
+                tmpCnt += 1
+                if kind == 'four with two pair' or kind == 'four with two single':  # 如果是四带一对或者四带两对，则value加4
+                    newValue = value + 4
+                elif (kind == 'three' or kind == 'four'
+                      or kind == 'three with pair' or kind == 'three with single'):
+                    newValue = value + 3
 
-                nextNode = curNode.get_child(action, 'all')
-                self.solve_with_score(nextNode, stepCnt + 1, value)
-        while len(curNode):
-            for kind in curNode.possibleStep:
-                if curNode.possibleStep[kind]:  # 出当前可能的牌
-                    nextNode = curNode.get_child(curNode.possibleStep[kind][0], 'all')
-                    curNode = nextNode
-                    stepCnt += 1
-                    if kind == 'four with two pair' or kind == 'four with two single':  # 如果是四带一对或者四带两对，则value加4
-                        value += 4
-                    elif (kind == 'three' or kind == 'four'
-                            or kind == 'three with pair' or kind == 'three with single'):
-                        value += 3
-                    break
-        self.solve_with_score(curNode, stepCnt, value)
-        # tmpCnt = 0 # 如果顺子，四带二这些牌型都没有，再出三带二三带一和其他牌
-        # for kind in curNode.possibleStep:
-        #     if kind == 'three with pair':
-        #         break
-        #     for action in curNode.possibleStep[kind]:
-        #         tmpCnt += 1
-        #         if kind == 'three straight' or kind == 'three straight with gap': # 如果是三顺子，则value加7
-        #             value += 7
-        #         elif kind == 'pair straight' or kind == 'pair straight with gap': # 如果是双顺子，则value加6
-        #             value += 6
-        #         elif kind == 'single straight' or kind == 'single straight with gap': # 如果是单顺子，则value加5
-        #             value += 5
-        #         elif kind == 'four with two pair' or kind == 'four with two single': # 如果是四带一对或者四带两对，则value加4
-        #             value += 4
-        #         elif kind == 'three with pair' or kind == 'three with single': # 如果是三带一或者三带二，则value加3
-        #             value += 3
-        #
-        #         nextNode = curNode.get_child(action)
-        #         self.solve_with_score(nextNode, stepCnt + 1, value)
-        # if not tmpCnt:  # 如果没有顺子，四带二等牌，就出三带一等其他类型的牌
-        #     while len(curNode):
-        #         for kind in curNode.possibleStep:
-        #             if curNode.possibleStep[kind]:  # 出当前可能的牌
-        #                 nextNode = curNode.get_child(curNode.possibleStep[kind][0])
-        #                 curNode = nextNode
-        #                 stepCnt += 1
-        #                 if (kind == 'three' or kind == 'four'
-        #                         or kind == 'three with pair' or kind == 'three with single'):
-        #                     value += 3
-        #                 break
-        #     self.solve_with_score(curNode, stepCnt, value)
+                nextNode = curNode.get_child(action)
+                self._deep_search_with_score(nextNode, stepCnt + 1, newValue)
+        if tmpCnt == 0:
+            while len(curNode):
+                for kind in curNode.possibleStep:
+                    if curNode.possibleStep[kind]:  # 出当前可能的牌
+                        nextNode = curNode.get_child(curNode.possibleStep[kind][0])
+                        curNode = nextNode
+                        stepCnt += 1
+                        break
+            self._deep_search_with_score(curNode, stepCnt, value)
+
+    def gaming(self, opponentAction):
+        """
+        1v1对战用的函数
+        :param opponentAction:  元组类型，(对手出的牌的类型, 实际出的牌的数组)
+        :return:                (自己出的牌的类型, 实际出的牌的数组)
+        """
+        if not opponentAction: # 如果对手没有出牌，就按可能出牌种类的顺序进行出牌
+            for kind in self.curNode.possibleStep:
+                if self.curNode.possibleStep[kind]:
+                    action = self.curNode.possibleStep[kind][0]
+                    self.curNode = self.curNode.get_child(action)
+                    return kind, action
+        else: # 如果对手出牌了，就根据对手出牌的类型在自己所有出牌可能中进行搜索
+            kind = opponentAction[0]
+            if kind in self.curNode.possibleStep:
+                for action in self.curNode.possibleStep[kind]:
+                    if kind != 'single':
+                        # 根据情况判断是否可以出牌
+                        if len(action) == len(opponentAction[1]) and action[0] > opponentAction[1][0]:
+                            self.curNode = self.curNode.get_child(action)
+                            return kind, action
+                    else:
+                        if action > opponentAction[1]:
+                            self.curNode = self.curNode.get_child(action)
+                            return kind, action
+            elif kind == 'four with two pair':
+                if len(self.curNode.possibleStep['four']) > 1:
+                    if self.curNode.possibleStep['four'][0][0] > opponentAction[1][0]:
+                        action = self.curNode.possibleStep['four'][0] + self.curNode.possibleStep['four'][1]
+                        return kind, action
+                    else:
+                        for four in self.curNode.possibleStep['four']:
+                            if four[0] > opponentAction[1][0]:
+                                action = self.curNode.possibleStep['four'][0] + four
+                                return kind, action
+        return None
 
 
 if __name__ == "__main__":
-    problem = PokerProblem()
-    problem.deal_random(2)
-    #problem.deal_specified([('3', 'heart'), ('4', 'heart'), ('5', 'heart'), ('6', 'heart'), ('6', 'spade'), ('7', 'heart'), ('8', 'heart'), ('8', 'club'), ('8', 'spade')])
-    #problem.deal_specified([('3', 'heart'), ('3', 'spade'), ('3', 'club'), ('4', 'heart'), ('4', 'spade'), ('4', 'club'), ('5', 'heart'), ('5', 'spade'), ('5', 'club'), ('7', 'heart'), ('8', 'heart')])
-    #problem.solve_without_score()
-    problem.solve_with_score(problem.initNode, 0, 0)
+    player = PokerPlayer()
+    player.deal_random(30)
+    #player.deal_specified([('3', 'heart'), ('4', 'heart'), ('5', 'heart'), ('6', 'heart'), ('6', 'spade'), ('7', 'heart'), ('8', 'heart'), ('8', 'club'), ('8', 'spade')])
+    #player.deal_specified([('3', 'heart'), ('3', 'spade'), ('3', 'club'), ('4', 'heart'), ('4', 'spade'), ('4', 'club'), ('5', 'heart'), ('5', 'spade'), ('5', 'club'), ('7', 'heart'), ('8', 'heart')])
+    # player.deal_specified(
+    #     [('3', 'heart'), ('4', 'heart'), ('4', 'spade'), ('4', 'club'), ('6', 'heart'), ('6', 'spade'), ('6', 'club'),
+    #      ('7', 'heart'), ('8', 'heart'), ('9', 'heart'), ('9', 'spade'),  ('9', 'heart'), ('9', 'spade'),
+    #      ('J', 'heart'), ('J', 'spade'), ('J', 'club'), ('J', 'diamond'), ('Q', 'spade'), ('K', 'club'),('K', 'heart'), ('A', 'club')])
+    #player.solve_without_score()
+    player.solve_with_score(player.initNode, 0, 0)
+    # player2 = PokerPlayer()
+    # player2.deal_random(20)
+    # print(player.initNode)
+    # print(player2.initNode)
+    # action = None
+    # while player.curNode and player2.curNode:
+    #     action = player.gaming(action)
+    #     print("player1:")
+    #     print(action)
+    #     action = player2.gaming(action)
+    #     print("player2:")
+    #     print(action)
 
-    print(problem.initNode.state)
-    for item in problem.path:
+    print(player.initNode.state)
+    for item in player.path:
         print(item)
-    print(problem.score)
+    print(player.score)
